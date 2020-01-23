@@ -1,0 +1,10 @@
+server.name: "kibana-server"
+server.host: "0"
+server.basePath: "/kibana"
+server.rewriteBasePath: true
+elasticsearch.hosts: [ "http://elasticsearch:9200" ]
+xpack.monitoring.ui.container.elasticsearch.enabled: true
+
+xpack.security.enabled: true
+elasticsearch.username: elastic
+elasticsearch.password: ${ELK_PASSWORD}

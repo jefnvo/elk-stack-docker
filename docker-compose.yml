@@ -1,0 +1,150 @@
+version: '3.7'
+
+x-logging:
+  &default-logging
+  options:
+    max-size: '100m'
+    max-file: '10'
+  driver: json-file
+
+services:
+  elasticsearch:   
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.3.2
+    logging: *default-logging
+    environment:
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "discovery.type=single-node"
+    ports: 
+      - 9200:9200
+      - 9300:9300
+    configs:
+      - source: elastic_config
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+    environment:
+      SERVICE_NAME: elasticsearch
+      ELASTIC_PASSWORD: ${ELK_PASSWORD}
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+    networks:
+      - elk
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 30s
+      rollback_config:
+        parallelism: 1
+        failure_action: pause
+        max_failure_ratio: 3
+        order: stop-first
+      update_config:
+        parallelism: 1
+        delay: 20s
+        order: stop-first
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.3.2 
+    logging: *default-logging
+    configs:
+      - source: kibana_config
+        target: /usr/share/kibana/config/kibana.yml
+    networks:
+      - elk
+    ports:
+      - 5601:5601
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 30s
+      rollback_config:
+        parallelism: 1
+        failure_action: pause
+        max_failure_ratio: 3
+        order: stop-first
+      update_config:
+        parallelism: 1
+        delay: 20s
+        order: stop-first
+      resources:
+        limits:
+          memory: 600M
+        reservations:
+          memory: 300M
+      placement:
+        constraints:
+         - node.role != manager
+  
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:7.3.2 
+    logging: *default-logging
+    user: root
+    networks:
+      - elk
+    configs:
+      - source: filebeat_config
+        target: /usr/share/filebeat/filebeat.yml
+    volumes:
+      - filebeat:/usr/share/filebeat/data
+      - /var/lib/docker:/var/lib/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/log/:/var/log/:ro
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch
+      - KIBANA_HOST=kibana
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${ELK_PASSWORD}
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 30s
+      rollback_config:
+        parallelism: 1
+        failure_action: pause
+        max_failure_ratio: 3
+        order: stop-first
+      update_config:
+        parallelism: 1
+        delay: 20s
+        order: stop-first
+      resources:
+        limits:
+          memory: 80m
+        reservations:
+          memory: 60m
+configs:
+  filebeat_config:
+    name: filebeat_config
+    file: ./filebeat/config/filebeat.yml
+  elastic_config:
+    name: elastic_config
+    file: ./elasticsearch/config/elasticsearch.yml
+  kibana_config:
+    name: kibana_config
+    file: ./kibana/config/kibana.yml
+
+networks:
+  elk:
+    driver: overlay
+    name: elk
+    external: true
+
+
+volumes:
+  elastic_data:
+    name: elastic_data
+  filebeat:
